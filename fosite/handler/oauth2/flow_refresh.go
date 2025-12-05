@@ -9,8 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ory/x/errorsx"
-
 	"github.com/pkg/errors"
 
 	"github.com/ory/hydra/v2/fosite"
@@ -24,7 +22,6 @@ type RefreshTokenGrantHandler struct {
 		RefreshTokenStrategyProvider
 	}
 	Storage interface {
-		fosite.Transactional
 		TokenRevocationStorageProvider
 		AccessTokenStorageProvider
 		RefreshTokenStorageProvider
@@ -41,11 +38,11 @@ type RefreshTokenGrantHandler struct {
 // HandleTokenEndpointRequest implements https://tools.ietf.org/html/rfc6749#section-6
 func (c *RefreshTokenGrantHandler) HandleTokenEndpointRequest(ctx context.Context, request fosite.AccessRequester) error {
 	if !c.CanHandleTokenEndpointRequest(ctx, request) {
-		return errorsx.WithStack(fosite.ErrUnknownRequest)
+		return errors.WithStack(fosite.ErrUnknownRequest)
 	}
 
 	if !request.GetClient().GetGrantTypes().Has("refresh_token") {
-		return errorsx.WithStack(fosite.ErrUnauthorizedClient.WithHint("The OAuth 2.0 Client is not allowed to use authorization grant 'refresh_token'."))
+		return errors.WithStack(fosite.ErrUnauthorizedClient.WithHint("The OAuth 2.0 Client is not allowed to use authorization grant 'refresh_token'."))
 	}
 
 	refresh := request.GetRequestForm().Get("refresh_token")
@@ -54,7 +51,7 @@ func (c *RefreshTokenGrantHandler) HandleTokenEndpointRequest(ctx context.Contex
 	if errors.Is(err, fosite.ErrInactiveToken) {
 		// Detected refresh token reuse
 		if rErr := c.handleRefreshTokenReuse(ctx, signature, originalRequest); rErr != nil {
-			return errorsx.WithStack(rErr)
+			return errors.WithStack(rErr)
 		}
 
 		return fosite.ErrInvalidGrant.WithWrap(err).
@@ -81,12 +78,12 @@ func (c *RefreshTokenGrantHandler) HandleTokenEndpointRequest(ctx context.Contex
 	if !(len(c.Config.GetRefreshTokenScopes(ctx)) == 0 || originalRequest.GetGrantedScopes().HasOneOf(c.Config.GetRefreshTokenScopes(ctx)...)) {
 		scopeNames := strings.Join(c.Config.GetRefreshTokenScopes(ctx), " or ")
 		hint := fmt.Sprintf("The OAuth 2.0 Client was not granted scope %s and may thus not perform the 'refresh_token' authorization grant.", scopeNames)
-		return errorsx.WithStack(fosite.ErrScopeNotGranted.WithHint(hint))
+		return errors.WithStack(fosite.ErrScopeNotGranted.WithHint(hint))
 	}
 
 	// The authorization server MUST ... and ensure that the refresh token was issued to the authenticated client
 	if originalRequest.GetClient().GetID() != request.GetClient().GetID() {
-		return errorsx.WithStack(fosite.ErrInvalidGrant.WithHint("The OAuth 2.0 Client ID from this request does not match the ID during the initial token issuance."))
+		return errors.WithStack(fosite.ErrInvalidGrant.WithHint("The OAuth 2.0 Client ID from this request does not match the ID during the initial token issuance."))
 	}
 
 	request.SetID(originalRequest.GetID())
@@ -96,7 +93,7 @@ func (c *RefreshTokenGrantHandler) HandleTokenEndpointRequest(ctx context.Contex
 
 	for _, scope := range originalRequest.GetGrantedScopes() {
 		if !c.Config.GetScopeStrategy(ctx)(request.GetClient().GetScopes(), scope) {
-			return errorsx.WithStack(fosite.ErrInvalidScope.WithHintf("The OAuth 2.0 Client is not allowed to request scope '%s'.", scope))
+			return errors.WithStack(fosite.ErrInvalidScope.WithHintf("The OAuth 2.0 Client is not allowed to request scope '%s'.", scope))
 		}
 		request.GrantScope(scope)
 	}
@@ -138,23 +135,24 @@ func (c *RefreshTokenGrantHandler) PopulateTokenEndpointResponse(ctx context.Con
 
 	signature := c.Strategy.RefreshTokenStrategy().RefreshTokenSignature(ctx, requester.GetRequestForm().Get("refresh_token"))
 
+	ctx, err = fosite.MaybeBeginTx(ctx, c.Storage)
+	if err != nil {
+		return errors.WithStack(fosite.ErrServerError.WithWrap(err).WithDebug(err.Error()))
+	}
+
 	storeReq := requester.Sanitize([]string{})
 	storeReq.SetID(requester.GetID())
 
-	err = c.Storage.Transaction(ctx, func(ctx context.Context) error {
-		if err := c.Storage.RefreshTokenStorage().RotateRefreshToken(ctx, requester.GetID(), signature); err != nil {
-			return err
-		}
-		if err := c.Storage.AccessTokenStorage().CreateAccessTokenSession(ctx, accessSignature, storeReq); err != nil {
-			return err
-		}
-		if err := c.Storage.RefreshTokenStorage().CreateRefreshTokenSession(ctx, refreshSignature, accessSignature, storeReq); err != nil {
-			return err
-		}
-		return nil
-	})
-	if err != nil {
-		return handleRefreshTokenEndpointStorageError(err)
+	if err = c.Storage.RefreshTokenStorage().RotateRefreshToken(ctx, requester.GetID(), signature); err != nil {
+		return c.handleRefreshTokenEndpointStorageError(ctx, err)
+	}
+
+	if err = c.Storage.AccessTokenStorage().CreateAccessTokenSession(ctx, accessSignature, storeReq); err != nil {
+		return c.handleRefreshTokenEndpointStorageError(ctx, err)
+	}
+
+	if err = c.Storage.RefreshTokenStorage().CreateRefreshTokenSession(ctx, refreshSignature, accessSignature, storeReq); err != nil {
+		return c.handleRefreshTokenEndpointStorageError(ctx, err)
 	}
 
 	responder.SetAccessToken(accessToken)
@@ -163,6 +161,10 @@ func (c *RefreshTokenGrantHandler) PopulateTokenEndpointResponse(ctx context.Con
 	responder.SetExpiresIn(getExpiresIn(requester, fosite.AccessToken, atLifespan, time.Now().UTC()))
 	responder.SetScopes(requester.GetGrantedScopes())
 	responder.SetExtra("refresh_token", refreshToken)
+
+	if err = fosite.MaybeCommitTx(ctx, c.Storage); err != nil {
+		return c.handleRefreshTokenEndpointStorageError(ctx, err)
+	}
 
 	return nil
 }
@@ -176,42 +178,60 @@ func (c *RefreshTokenGrantHandler) PopulateTokenEndpointResponse(ctx context.Con
 //	legitimate client is trying to access, in case of such an access
 //	attempt the valid refresh token and the access authorization
 //	associated with it are both revoked.
-func (c *RefreshTokenGrantHandler) handleRefreshTokenReuse(ctx context.Context, signature string, req fosite.Requester) error {
-	err := c.Storage.Transaction(ctx, func(ctx context.Context) error {
-		if err := c.Storage.RefreshTokenStorage().DeleteRefreshTokenSession(ctx, signature); err != nil {
-			return err
-		}
-		if err := c.Storage.TokenRevocationStorage().RevokeRefreshToken(ctx, req.GetID()); err != nil && !errors.Is(err, fosite.ErrNotFound) {
-			return err
-		}
-		if err := c.Storage.TokenRevocationStorage().RevokeAccessToken(ctx, req.GetID()); err != nil && !errors.Is(err, fosite.ErrNotFound) {
-			return err
-		}
-		return nil
-	})
-	return handleRefreshTokenEndpointStorageError(err)
+func (c *RefreshTokenGrantHandler) handleRefreshTokenReuse(ctx context.Context, signature string, req fosite.Requester) (err error) {
+	ctx, err = fosite.MaybeBeginTx(ctx, c.Storage)
+	if err != nil {
+		return errors.WithStack(fosite.ErrServerError.WithWrap(err).WithDebug(err.Error()))
+	}
+	defer func() {
+		err = c.handleRefreshTokenEndpointStorageError(ctx, err)
+	}()
+
+	if err = c.Storage.RefreshTokenStorage().DeleteRefreshTokenSession(ctx, signature); err != nil {
+		return err
+	} else if err = c.Storage.TokenRevocationStorage().RevokeRefreshToken(
+		ctx, req.GetID(),
+	); err != nil && !errors.Is(err, fosite.ErrNotFound) {
+		return err
+	} else if err = c.Storage.TokenRevocationStorage().RevokeAccessToken(
+		ctx, req.GetID(),
+	); err != nil && !errors.Is(err, fosite.ErrNotFound) {
+		return err
+	}
+
+	if err = fosite.MaybeCommitTx(ctx, c.Storage); err != nil {
+		return err
+	}
+
+	return nil
 }
 
-func handleRefreshTokenEndpointStorageError(storageErr error) (err error) {
+func (c *RefreshTokenGrantHandler) handleRefreshTokenEndpointStorageError(ctx context.Context, storageErr error) (err error) {
 	if storageErr == nil {
 		return nil
 	}
 
+	defer func() {
+		if rollBackTxnErr := fosite.MaybeRollbackTx(ctx, c.Storage); rollBackTxnErr != nil {
+			err = errors.WithStack(fosite.ErrServerError.WithWrap(err).WithDebugf("error: %s; rollback error: %s", err, rollBackTxnErr))
+		}
+	}()
+
 	if errors.Is(storageErr, fosite.ErrSerializationFailure) {
-		return errorsx.WithStack(fosite.ErrInvalidRequest.
+		return errors.WithStack(fosite.ErrInvalidRequest.
 			WithDebug(storageErr.Error()).
 			WithWrap(storageErr).
 			WithHint("Failed to refresh token because of multiple concurrent requests using the same token. Please retry the request."))
 	}
 
 	if errors.Is(storageErr, fosite.ErrNotFound) || errors.Is(storageErr, fosite.ErrInactiveToken) {
-		return errorsx.WithStack(fosite.ErrInvalidRequest.
+		return errors.WithStack(fosite.ErrInvalidRequest.
 			WithDebug(storageErr.Error()).
 			WithWrap(storageErr).
 			WithHint("Failed to refresh token. Please retry the request."))
 	}
 
-	return errorsx.WithStack(fosite.ErrServerError.WithWrap(storageErr).WithDebug(storageErr.Error()))
+	return errors.WithStack(fosite.ErrServerError.WithWrap(storageErr).WithDebug(storageErr.Error()))
 }
 
 func (c *RefreshTokenGrantHandler) CanSkipClientAuth(ctx context.Context, requester fosite.AccessRequester) bool {

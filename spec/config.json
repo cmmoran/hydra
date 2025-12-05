@@ -624,7 +624,8 @@
           "description": "Defines how scopes are matched. For more details have a look at https://github.com/ory/fosite#scopes",
           "enum": [
             "exact",
-            "wildcard"
+            "wildcard",
+            "wildcard_deep"
           ],
           "default": "wildcard"
         },

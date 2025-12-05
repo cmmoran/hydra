@@ -90,8 +90,11 @@ func (p *DefaultProvider) GetAuthorizeCodeLifespan(ctx context.Context) time.Dur
 var _ fosite.ScopeStrategyProvider = (*DefaultProvider)(nil)
 
 func (p *DefaultProvider) GetScopeStrategy(ctx context.Context) fosite.ScopeStrategy {
-	if strings.ToLower(p.getProvider(ctx).String(KeyScopeStrategy)) == "wildcard" {
+	switch strings.ToLower(p.getProvider(ctx).String(KeyScopeStrategy)) {
+	case "wildcard":
 		return fosite.WildcardScopeStrategy
+	case "wildcard_deep":
+		return fosite.DeepWildcardScopeStrategy
 	}
 	return fosite.ExactScopeStrategy
 }

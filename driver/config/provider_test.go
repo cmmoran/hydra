@@ -370,6 +370,20 @@ func TestProviderValidates(t *testing.T) {
 	}, c.Tracing())
 }
 
+func TestProviderScopeStrategyModes(t *testing.T) {
+	ctx := t.Context()
+
+	p := newProvider(t, configx.WithValue(KeyScopeStrategy, "wildcard"), configx.SkipValidation())
+	assert.False(t, p.GetScopeStrategy(ctx)([]string{"read.*"}, "read"), "wildcard should not match zero segments")
+	assert.True(t, p.GetScopeStrategy(ctx)([]string{"read.*"}, "read.profile"))
+
+	p = newProvider(t, configx.WithValue(KeyScopeStrategy, "wildcard_deep"), configx.SkipValidation())
+	assert.True(t, p.GetScopeStrategy(ctx)([]string{"read.*"}, "read"), "wildcard_deep should match zero segments")
+	assert.True(t, p.GetScopeStrategy(ctx)([]string{"read.*"}, "read.profile.settings"))
+	assert.False(t, p.GetScopeStrategy(ctx)([]string{"read.+.profile"}, "read.profile"), "+ should match exactly one segment")
+	assert.True(t, p.GetScopeStrategy(ctx)([]string{"read.+.profile"}, "read.user.profile"))
+}
+
 func TestSetPerm(t *testing.T) {
 	f, e := os.CreateTemp("", "test")
 	require.NoError(t, e)

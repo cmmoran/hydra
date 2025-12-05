@@ -117,6 +117,25 @@ func TestWildcardScopeStrategy(t *testing.T) {
 	assert.True(t, strategy(scopes, "openid"))
 }
 
+func TestDeepWildcardScopeStrategy(t *testing.T) {
+	var strategy ScopeStrategy = DeepWildcardScopeStrategy
+
+	scopes := []string{"foo.*"}
+	assert.True(t, strategy(scopes, "foo"))
+	assert.True(t, strategy(scopes, "foo.bar"))
+	assert.True(t, strategy(scopes, "foo.bar.baz"))
+
+	scopes = []string{"foo.*.baz"}
+	assert.True(t, strategy(scopes, "foo.baz"))
+	assert.True(t, strategy(scopes, "foo.bar.baz"))
+	assert.True(t, strategy(scopes, "foo.bar.qux.baz"))
+
+	scopes = []string{"foo.+.baz"}
+	assert.False(t, strategy(scopes, "foo.baz"))
+	assert.True(t, strategy(scopes, "foo.bar.baz"))
+	assert.False(t, strategy(scopes, "foo.bar.qux.baz"))
+}
+
 func TestExactScopeStrategy2ScopeStrategy(t *testing.T) {
 	var strategy ScopeStrategy = ExactScopeStrategy
 
