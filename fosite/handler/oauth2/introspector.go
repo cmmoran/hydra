@@ -7,7 +7,7 @@ import (
 	"context"
 
 	"github.com/ory/hydra/v2/fosite"
-	"github.com/ory/x/errorsx"
+	"github.com/pkg/errors"
 )
 
 var _ fosite.TokenIntrospector = (*CoreValidator)(nil)
@@ -56,14 +56,18 @@ func (c *CoreValidator) IntrospectToken(ctx context.Context, token string, token
 }
 
 func matchScopes(ss fosite.ScopeStrategy, granted, scopes []string) error {
+	found := false
 	for _, scope := range scopes {
 		if scope == "" {
 			continue
 		}
-
-		if !ss(granted, scope) {
-			return errorsx.WithStack(fosite.ErrInvalidScope.WithHintf("The request scope '%s' has not been granted or is not allowed to be requested.", scope))
+		if ss(granted, scope) {
+			found = true
+			break
 		}
+	}
+	if !found {
+		return errors.WithStack(fosite.ErrInvalidScope.WithHintf("The request scope(s) '%s' have not been granted or are not allowed to be requested.", scopes))
 	}
 
 	return nil
@@ -73,12 +77,12 @@ func (c *CoreValidator) introspectAccessToken(ctx context.Context, token string,
 	sig := c.Strategy.AccessTokenStrategy().AccessTokenSignature(ctx, token)
 	or, err := c.Storage.AccessTokenStorage().GetAccessTokenSession(ctx, sig, accessRequest.GetSession())
 	if err != nil {
-		return errorsx.WithStack(fosite.ErrRequestUnauthorized.WithWrap(err).WithDebug(err.Error()))
-	} else if err := c.Strategy.AccessTokenStrategy().ValidateAccessToken(ctx, or, token); err != nil {
+		return errors.WithStack(fosite.ErrRequestUnauthorized.WithWrap(err).WithDebug(err.Error()))
+	} else if err = c.Strategy.AccessTokenStrategy().ValidateAccessToken(ctx, or, token); err != nil {
 		return err
 	}
 
-	if err := matchScopes(c.Config.GetScopeStrategy(ctx), or.GetGrantedScopes(), scopes); err != nil {
+	if err = matchScopes(c.Config.GetScopeStrategy(ctx), or.GetGrantedScopes(), scopes); err != nil {
 		return err
 	}
 
@@ -91,12 +95,12 @@ func (c *CoreValidator) introspectRefreshToken(ctx context.Context, token string
 	or, err := c.Storage.RefreshTokenStorage().GetRefreshTokenSession(ctx, sig, accessRequest.GetSession())
 
 	if err != nil {
-		return errorsx.WithStack(fosite.ErrRequestUnauthorized.WithWrap(err).WithDebug(err.Error()))
-	} else if err := c.Strategy.RefreshTokenStrategy().ValidateRefreshToken(ctx, or, token); err != nil {
+		return errors.WithStack(fosite.ErrRequestUnauthorized.WithWrap(err).WithDebug(err.Error()))
+	} else if err = c.Strategy.RefreshTokenStrategy().ValidateRefreshToken(ctx, or, token); err != nil {
 		return err
 	}
 
-	if err := matchScopes(c.Config.GetScopeStrategy(ctx), or.GetGrantedScopes(), scopes); err != nil {
+	if err = matchScopes(c.Config.GetScopeStrategy(ctx), or.GetGrantedScopes(), scopes); err != nil {
 		return err
 	}
 

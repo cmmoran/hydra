@@ -53,8 +53,9 @@ func TestWildcardScopeStrategy(t *testing.T) {
 	assert.False(t, strategy(scopes, "foo.bar.baz"))
 	assert.False(t, strategy(scopes, "foo.bar"))
 
-	scopes = []string{"*"}
+	scopes = []string{"+"}
 	assert.False(t, strategy(scopes, ""))
+	scopes = []string{"*"}
 	assert.True(t, strategy(scopes, "asdf"))
 	assert.True(t, strategy(scopes, "asdf.asdf"))
 
@@ -74,29 +75,39 @@ func TestWildcardScopeStrategy(t *testing.T) {
 	assert.True(t, strategy(scopes, "foo.bar"))
 	assert.True(t, strategy(scopes, "foo.baz"))
 	assert.True(t, strategy(scopes, "foo.bar.baz"))
+
+	scopes = []string{"foo.+"}
 	assert.False(t, strategy(scopes, "foo"))
 
 	scopes = []string{"foo.*.baz"}
 	assert.True(t, strategy(scopes, "foo.*.baz"))
 	assert.True(t, strategy(scopes, "foo.bar.baz"))
 	assert.False(t, strategy(scopes, "foo..baz"))
-	assert.False(t, strategy(scopes, "foo.baz"))
 	assert.False(t, strategy(scopes, "foo"))
 	assert.False(t, strategy(scopes, "foo.bar.bar"))
 
+	scopes = []string{"foo.+.baz"}
+	assert.False(t, strategy(scopes, "foo.baz"))
+
 	scopes = []string{"foo.*.bar.*"}
 	assert.True(t, strategy(scopes, "foo.baz.bar.baz"))
-	assert.False(t, strategy(scopes, "foo.baz.baz.bar.baz"))
 	assert.True(t, strategy(scopes, "foo.baz.bar.bar.bar"))
-	assert.False(t, strategy(scopes, "foo.baz.bar"))
 	assert.True(t, strategy(scopes, "foo.*.bar.*.*.*"))
 	assert.True(t, strategy(scopes, "foo.1.bar.1.2.3.4.5"))
 
+	scopes = []string{"foo.+.bar.*"}
+	assert.False(t, strategy(scopes, "foo.baz.baz.bar.baz"))
+
+	scopes = []string{"foo.+.bar.+"}
+	assert.False(t, strategy(scopes, "foo.baz.bar"))
+
 	scopes = []string{"foo.*.bar"}
 	assert.True(t, strategy(scopes, "foo.bar.bar"))
-	assert.False(t, strategy(scopes, "foo.bar.bar.bar"))
 	assert.False(t, strategy(scopes, "foo..bar"))
 	assert.False(t, strategy(scopes, "foo.bar..bar"))
+
+	scopes = []string{"foo.+.bar"}
+	assert.False(t, strategy(scopes, "foo.bar.bar.bar"))
 
 	scopes = []string{"foo.*.bar.*.baz.*"}
 	assert.False(t, strategy(scopes, "foo.*.*"))
@@ -106,7 +117,11 @@ func TestWildcardScopeStrategy(t *testing.T) {
 	assert.False(t, strategy(scopes, "foo.b*.bar"))
 	assert.True(t, strategy(scopes, "foo.bar.bar.baz.baz.baz"))
 	assert.True(t, strategy(scopes, "foo.bar.bar.baz.baz.baz.baz"))
+
+	scopes = []string{"foo.+.bar.+.baz.+"}
 	assert.False(t, strategy(scopes, "foo.bar.bar.baz.baz"))
+
+	scopes = []string{"foo.+.bar.*.baz.*"}
 	assert.False(t, strategy(scopes, "foo.bar.baz.baz.baz.bar"))
 
 	scopes = strings.Fields("hydra.* openid offline  hydra")

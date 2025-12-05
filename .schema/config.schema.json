@@ -1036,7 +1036,7 @@
       "examples": ["cpu"]
     },
     "tracing": {
-      "$ref": "https://raw.githubusercontent.com/ory/hydra/ab35ad47/oryx/otelx/config.schema.json"
+      "$ref": "https://raw.githubusercontent.com/ory/hydra/c92177a2b/oryx/otelx/config.schema.json"
     },
     "sqa": {
       "type": "object",

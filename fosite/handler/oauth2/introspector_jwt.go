@@ -78,7 +78,7 @@ func (v *StatelessJWTValidator) IntrospectToken(ctx context.Context, token strin
 
 	requester := AccessTokenJWTToRequest(t)
 
-	if err := matchScopes(v.Config.GetScopeStrategy(ctx), requester.GetGrantedScopes(), scopes); err != nil {
+	if err = matchScopes(v.Config.GetScopeStrategy(ctx), requester.GetGrantedScopes(), scopes); err != nil {
 		return fosite.AccessToken, err
 	}
 
