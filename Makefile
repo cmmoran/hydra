@@ -1,8 +1,12 @@
 SHELL=/bin/bash -o pipefail
 
-export PATH 		:= .bin:${PATH}
-export PWD 			:= $(shell pwd)
-export IMAGE_TAG 	:= $(if $(IMAGE_TAG),$(IMAGE_TAG),latest)
+
+export PATH 				:= .bin:${PATH}
+export PWD 					:= $(shell pwd)
+export IMAGE_TAG 			:= $(if $(IMAGE_TAG),$(IMAGE_TAG),latest)
+export DOCKER_REPO 			?= "oryd"
+export DOCKER_PROJECT 		?= "hydra"
+export DOCKER_FULL 			?= "$(DOCKER_REPO)/$(DOCKER_PROJECT)"
 
 GOLANGCI_LINT_VERSION = 2.4.0
 
@@ -51,10 +55,15 @@ test-resetdb:
 	docker run --rm --name hydra_test_database_postgres -p 3445:5432 -e POSTGRES_PASSWORD=secret -e POSTGRES_DB=postgres -d postgres:16
 	docker run --rm --name hydra_test_database_cockroach -p 3446:26257 -d cockroachdb/cockroach:latest-v25.3 start-single-node --insecure
 
-# Build local docker images
+# Build docker image
 .PHONY: docker
 docker:
-	DOCKER_CONTENT_TRUST=1 docker build --progress=plain -f .docker/Dockerfile-local-build -t oryd/hydra:${IMAGE_TAG} .
+	DOCKER_BUILDKIT=1 DOCKER_CONTENT_TRUST=1 docker build -f .docker/Dockerfile-local-build --push -t ${DOCKER_FULL}:${IMAGE_TAG} .
+
+# Build local docker images
+.PHONY: docker-local
+docker-local:
+	DOCKER_CONTENT_TRUST=1 docker build --progress=plain -f .docker/Dockerfile-local-build -t ${DOCKER_FULL}:${IMAGE_TAG} .
 	echo "Local development image has been built."
 
 .PHONY: e2e

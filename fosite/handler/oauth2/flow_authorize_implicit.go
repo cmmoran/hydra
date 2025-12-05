@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ory/x/errorsx"
+	"github.com/pkg/errors"
 
 	"github.com/ory/hydra/v2/fosite"
 )
@@ -38,17 +38,17 @@ func (c *AuthorizeImplicitGrantHandler) HandleAuthorizeEndpointRequest(ctx conte
 
 	// Disabled because this is already handled at the authorize_request_handler
 	// if !ar.GetClient().GetResponseTypes().Has("token") {
-	// 	 return errorsx.WithStack(fosite.ErrInvalidGrant.WithDebug("The client is not allowed to use response type token"))
+	// 	 return errors.WithStack(fosite.ErrInvalidGrant.WithDebug("The client is not allowed to use response type token"))
 	// }
 
 	if !ar.GetClient().GetGrantTypes().Has("implicit") {
-		return errorsx.WithStack(fosite.ErrInvalidGrant.WithHint("The OAuth 2.0 Client is not allowed to use the authorization grant 'implicit'."))
+		return errors.WithStack(fosite.ErrInvalidGrant.WithHint("The OAuth 2.0 Client is not allowed to use the authorization grant 'implicit'."))
 	}
 
 	client := ar.GetClient()
 	for _, scope := range ar.GetRequestedScopes() {
 		if !c.Config.GetScopeStrategy(ctx)(client.GetScopes(), scope) {
-			return errorsx.WithStack(fosite.ErrInvalidScope.WithHintf("The OAuth 2.0 Client is not allowed to request scope '%s'.", scope))
+			return errors.WithStack(fosite.ErrInvalidScope.WithHintf("The OAuth 2.0 Client is not allowed to request scope '%s'.", scope))
 		}
 	}
 
@@ -72,11 +72,11 @@ func (c *AuthorizeImplicitGrantHandler) IssueImplicitAccessToken(ctx context.Con
 	// Generate the access token
 	token, signature, err := c.Strategy.AccessTokenStrategy().GenerateAccessToken(ctx, ar)
 	if err != nil {
-		return errorsx.WithStack(fosite.ErrServerError.WithWrap(err).WithDebug(err.Error()))
+		return errors.WithStack(fosite.ErrServerError.WithWrap(err).WithDebug(err.Error()))
 	}
 
 	if err := c.Storage.AccessTokenStorage().CreateAccessTokenSession(ctx, signature, ar.Sanitize([]string{})); err != nil {
-		return errorsx.WithStack(fosite.ErrServerError.WithWrap(err).WithDebug(err.Error()))
+		return errors.WithStack(fosite.ErrServerError.WithWrap(err).WithDebug(err.Error()))
 	}
 
 	resp.AddParameter("access_token", token)
