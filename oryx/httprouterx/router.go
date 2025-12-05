@@ -4,6 +4,7 @@
 package httprouterx
 
 import (
+	"context"
 	"net/http"
 	"path"
 	"strings"
@@ -12,7 +13,10 @@ import (
 	"github.com/ory/x/prometheusx"
 )
 
-const AdminPrefix = "/admin"
+const (
+	AdminPrefix    = "/admin"
+	XCorrelationId = "X-Correlation-Id"
+)
 
 type (
 	router struct {
@@ -20,8 +24,9 @@ type (
 		prefix         string
 		metricsManager *prometheusx.MetricsManager
 	}
-	RouterAdmin  struct{ router }
-	RouterPublic struct{ router }
+	RouterAdmin              struct{ router }
+	RouterPublic             struct{ router }
+	XCorrelationIdContextKey struct{}
 
 	Router interface {
 		http.Handler
@@ -143,6 +148,15 @@ func NoCacheNegroni(rw http.ResponseWriter, r *http.Request, next http.HandlerFu
 func AddAdminPrefixIfNotPresentNegroni(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
 	if !strings.HasPrefix(r.URL.Path, AdminPrefix) {
 		r.URL.Path = path.Join(AdminPrefix, r.URL.Path)
+	}
+
+	next(rw, r)
+}
+
+func IncludeCorrelationId(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+	if len(r.Header) > 0 && r.Header.Get(XCorrelationId) != "" {
+		ctx := context.WithValue(r.Context(), XCorrelationIdContextKey{}, r.Header.Get(XCorrelationId))
+		r = r.WithContext(ctx)
 	}
 
 	next(rw, r)

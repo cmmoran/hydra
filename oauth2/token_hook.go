@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/ory/x/httprouterx"
 	"github.com/pkg/errors"
 
 	"github.com/hashicorp/go-retryablehttp"
@@ -97,12 +98,16 @@ func executeHookAndUpdateSession(ctx context.Context, reg x.HTTPClientProvider, 
 				WithDebugf("Unable to prepare the HTTP Request: %s", err),
 		)
 	}
-	if err := applyAuth(req, hookConfig.Auth); err != nil {
+	if err = applyAuth(req, hookConfig.Auth); err != nil {
 		return errors.WithStack(
 			fosite.ErrServerError.
 				WithWrap(err).
 				WithDescription("An error occurred while applying the token hook authentication.").
 				WithDebugf("Unable to apply the token hook authentication: %s", err))
+	}
+
+	if xcid, ok := ctx.Value(httprouterx.XCorrelationIdContextKey{}).(string); ok && xcid != "" {
+		req.Header.Set(httprouterx.XCorrelationId, xcid)
 	}
 	req.Header.Set("Content-Type", "application/json; charset=UTF-8")
 

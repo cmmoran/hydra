@@ -74,7 +74,7 @@ func (c *HMACStrategy) Generate(ctx context.Context) (string, string, error) {
 	// by the authorization server.
 	tokenKey, err := RandomBytes(entropy)
 	if err != nil {
-		return "", "", errorsx.WithStack(err)
+		return "", "", errors.WithStack(err)
 	}
 
 	signature := c.generateHMAC(ctx, tokenKey, &signingKey)
