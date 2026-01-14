@@ -115,7 +115,7 @@ type Client struct {
 	// OAuth 2.0 Client Allowed CORS Origins
 	//
 	// One or more URLs (scheme://host[:port]) which are allowed to make CORS requests
-	// to the /oauth/token endpoint. If this array is empty, the sever's CORS origin configuration (`CORS_ALLOWED_ORIGINS`)
+	// to the /oauth/token endpoint. If this array is empty, the server's CORS origin configuration (`CORS_ALLOWED_ORIGINS`)
 	// will be used instead. If this array is set, the allowed origins are appended to the server's CORS origin configuration.
 	// Be aware that environment variable `CORS_ENABLED` MUST be set to `true` for this to work.
 	AllowedCORSOrigins sqlxx.StringSliceJSONFormat `json:"allowed_cors_origins" db:"allowed_cors_origins"`
@@ -271,7 +271,7 @@ type Client struct {
 
 	// OAuth 2.0 Client Metadata
 	//
-	// Use this field to story arbitrary data about the OAuth 2.0 Client. Can not be modified using OpenID Connect Dynamic Client Registration protocol.
+	// Use this field to store arbitrary data about the OAuth 2.0 Client. Can not be modified using OpenID Connect Dynamic Client Registration protocol.
 	Metadata sqlxx.JSONRawMessage `json:"metadata,omitempty" db:"metadata" faker:"-"`
 
 	// OpenID Connect Dynamic Client Registration Access Token
