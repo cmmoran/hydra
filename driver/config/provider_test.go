@@ -348,11 +348,12 @@ func TestProviderValidates(t *testing.T) {
 	assert.EqualValues(t, &otelx.Config{
 		ServiceName: "hydra service",
 		Provider:    "jaeger",
-		Providers: otelx.ProvidersConfig{
-			Jaeger: otelx.JaegerConfig{
-				LocalAgentAddress: "127.0.0.1:6831",
-				Sampling: otelx.JaegerSampling{
-					ServerURL:    "http://sampling",
+			Providers: otelx.ProvidersConfig{
+				Jaeger: otelx.JaegerConfig{
+					CollectorScheme:  "http",
+					LocalAgentAddress: "127.0.0.1:6831",
+					Sampling: otelx.JaegerSampling{
+						ServerURL:    "http://sampling",
 					TraceIDRatio: 1,
 				},
 			},

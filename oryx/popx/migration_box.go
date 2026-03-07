@@ -4,6 +4,7 @@
 package popx
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"io/fs"
@@ -146,7 +147,7 @@ func isMigrationEmpty(content string) bool {
 }
 
 type queryExecutor interface {
-	Exec(query string, args ...any) (sql.Result, error)
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
 // NewMigrationBox creates a new migration box.
@@ -172,17 +173,19 @@ func NewMigrationBox(dir fs.FS, c *pop.Connection, l *logrusx.Logger, opts ...Mi
 				return nil
 			}
 
-			var q queryExecutor = c.Store.SQLDB()
-			if c.TX != nil {
-				q = c.TX
-			}
+				var q queryExecutor = c.Store
+				if c.TX != nil {
+					q = c.TX
+				}
 
-			if _, err = q.Exec(content); err != nil {
-				return errors.Wrapf(err, "error executing %s, sql: %s", mf.Path, content)
+				// Use context-aware execution so migration test and command timeouts can
+				// cancel blocked DB calls (for example, long/blocked Cockroach DDL).
+				if _, err = q.ExecContext(c.Context(), content); err != nil {
+					return errors.Wrapf(err, "error executing %s, sql: %s", mf.Path, content)
+				}
+				return nil
 			}
-			return nil
 		}
-	}
 
 	err := mb.findMigrations(dir, txRunner)
 	if err != nil {
