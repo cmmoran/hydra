@@ -107,9 +107,8 @@ func executeHookAndUpdateSession(ctx context.Context, reg httpx.ClientProvider, 
 				WithDebugf("Unable to apply the token hook authentication: %s", err))
 	}
 
-	if xcid, ok := ctx.Value(httprouterx.XCorrelationIdContextKey{}).(string); ok && xcid != "" {
-		req.Header.Set(httprouterx.XCorrelationId, xcid)
-	}
+	httprouterx.MaybeAddCustomHeaders(ctx, req)
+
 	req.Header.Set("Content-Type", "application/json; charset=UTF-8")
 
 	t0 := time.Now()

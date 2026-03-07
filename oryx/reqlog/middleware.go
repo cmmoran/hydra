@@ -116,10 +116,24 @@ func (m *Middleware) WrapFunc(handler http.HandlerFunc) http.HandlerFunc {
 }
 
 func (m *Middleware) ServeHTTP(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
-	if len(r.Header) > 0 && r.Header.Get(XCorrelationIdKey) != "" {
-		ctx := context.WithValue(r.Context(), XCorrelationIdContextKey{}, r.Header.Get(XCorrelationIdKey))
-		r = r.WithContext(ctx)
+	var entry *logrusx.Logger
+	if r != nil && len(r.Header) > 0 {
+		ctx := r.Context()
+		var xcorrId, xsess string
+		entry = m.Logger.NewEntry()
+		if xcorrId = r.Header.Get(XCorrelationId); xcorrId != "" {
+			ctx = context.WithValue(ctx, XCorrelationIdKey, xcorrId)
+			entry = entry.WithField(XCorrelationIdLogKey, xcorrId)
+		}
+		if xsess = r.Header.Get(XSessionEntropy); xsess != "" {
+			ctx = context.WithValue(ctx, XSessionEntropyKey, xsess)
+			entry = entry.WithField(XSessionEntropyLogKey, xsess)
+		}
+		r = r.Clone(ctx)
+	} else {
+		entry = m.Logger.NewEntry()
 	}
+
 	if m.Before == nil {
 		m.Before = DefaultBefore
 	}
@@ -142,8 +156,6 @@ func (m *Middleware) ServeHTTP(rw http.ResponseWriter, r *http.Request, next htt
 	if realIP := r.Header.Get("X-Real-IP"); realIP != "" {
 		remoteAddr = realIP
 	}
-
-	entry := m.Logger.NewEntry().WithField(XCorrelationIdLogKey, r.Header.Get(XCorrelationIdKey))
 
 	entry = m.Before(entry, r, remoteAddr)
 

@@ -1,10 +1,13 @@
 package reqlog
 
-import "net/http"
+type ContextHeader string
 
-type XCorrelationIdContextKey struct{}
+const (
+	XCorrelationIdLogKey  = "x-correlation-id"
+	XSessionEntropyLogKey = "x-session-entropy"
+	XCorrelationId        = "X-Correlation-Id"
+	XSessionEntropy       = "X-Session-Entropy"
 
-var (
-	XCorrelationIdLogKey = "x-correlation-id"
-	XCorrelationIdKey    = http.CanonicalHeaderKey(XCorrelationIdLogKey)
+	XCorrelationIdKey  = ContextHeader(XCorrelationId)
+	XSessionEntropyKey = ContextHeader(XSessionEntropy)
 )

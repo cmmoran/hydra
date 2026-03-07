@@ -10,12 +10,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hashicorp/go-retryablehttp"
 	"github.com/ory/x/prometheusx"
+	"github.com/ory/x/reqlog"
 )
 
 const (
-	AdminPrefix    = "/admin"
-	XCorrelationId = "X-Correlation-Id"
+	AdminPrefix = "/admin"
 )
 
 type (
@@ -139,11 +140,40 @@ func AddAdminPrefixIfNotPresentNegroni(rw http.ResponseWriter, r *http.Request, 
 	next(rw, r)
 }
 
-func IncludeCorrelationId(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
-	if len(r.Header) > 0 && r.Header.Get(XCorrelationId) != "" {
-		ctx := context.WithValue(r.Context(), XCorrelationIdContextKey{}, r.Header.Get(XCorrelationId))
-		r = r.WithContext(ctx)
+func IncludeCustomHeaders(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+	if r != nil && len(r.Header) > 0 {
+		ctx := r.Context()
+		var xcorrId, xsess string
+		if xcorrId = r.Header.Get(reqlog.XCorrelationId); xcorrId != "" {
+			ctx = context.WithValue(ctx, reqlog.XCorrelationIdKey, xcorrId)
+		}
+		if xsess = r.Header.Get(reqlog.XSessionEntropy); xsess != "" {
+			ctx = context.WithValue(ctx, reqlog.XSessionEntropyKey, xsess)
+		}
+		r = r.Clone(ctx)
 	}
 
 	next(rw, r)
+}
+
+func MaybeAddCustomHeaders(c context.Context, req any) {
+	if req == nil {
+		return
+	}
+	switch r := req.(type) {
+	case *http.Request:
+		if x, ok := c.Value(reqlog.XCorrelationIdKey).(string); ok && x != "" {
+			r.Header.Set(reqlog.XCorrelationId, x)
+		}
+		if x, ok := c.Value(reqlog.XSessionEntropyKey).(string); ok && x != "" {
+			r.Header.Set(reqlog.XSessionEntropy, x)
+		}
+	case *retryablehttp.Request:
+		if x, ok := c.Value(reqlog.XCorrelationIdKey).(string); ok && x != "" {
+			r.Header.Set(reqlog.XCorrelationId, x)
+		}
+		if x, ok := c.Value(reqlog.XSessionEntropyKey).(string); ok && x != "" {
+			r.Header.Set(reqlog.XSessionEntropy, x)
+		}
+	}
 }

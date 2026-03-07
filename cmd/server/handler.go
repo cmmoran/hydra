@@ -130,7 +130,7 @@ func adminServer(ctx context.Context, d *driver.RegistrySQL, sqaMetrics *metrics
 		logger.ExcludePaths(healthx.AliveCheckPath, healthx.ReadyCheckPath, "/admin"+prometheusx.MetricsPrometheusPath)
 	}
 
-	n.UseFunc(httprouterx.IncludeCorrelationId)
+	n.UseFunc(httprouterx.IncludeCustomHeaders)
 	n.UseFunc(httprouterx.TrimTrailingSlashNegroni)
 	n.UseFunc(httprouterx.NoCacheNegroni)
 	n.UseFunc(httprouterx.AddAdminPrefixIfNotPresentNegroni)
@@ -183,7 +183,7 @@ func publicServer(ctx context.Context, d *driver.RegistrySQL, sqaMetrics *metric
 		logger.ExcludePaths(healthx.AliveCheckPath, healthx.ReadyCheckPath)
 	}
 
-	n.UseFunc(httprouterx.IncludeCorrelationId)
+	n.UseFunc(httprouterx.IncludeCustomHeaders)
 	n.UseFunc(httprouterx.TrimTrailingSlashNegroni)
 	n.UseFunc(httprouterx.NoCacheNegroni)
 	n.UseFunc(semconv.Middleware)
