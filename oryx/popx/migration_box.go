@@ -30,7 +30,6 @@ type (
 		migrationsUp        Migrations
 		migrationsDown      Migrations
 		perMigrationTimeout time.Duration
-		dumpMigrations      bool
 		l                   *logrusx.Logger
 		migrationContent    MigrationContent
 	}
@@ -77,15 +76,10 @@ func WithPerMigrationTimeout(timeout time.Duration) MigrationBoxOption {
 	}
 }
 
-func WithDumpMigrations() MigrationBoxOption {
-	return func(m *MigrationBox) {
-		m.dumpMigrations = true
-	}
-}
+var testdataPattern = regexp.MustCompile(`^(\d+)_testdata(|\.[a-zA-Z0-9]+).sql$`)
 
 // WithTestdata adds testdata to the migration box.
 func WithTestdata(t *testing.T, testdata fs.FS) MigrationBoxOption {
-	testdataPattern := regexp.MustCompile(`^(\d+)_testdata(|\.[a-zA-Z0-9]+).sql$`)
 	return func(m *MigrationBox) {
 		require.NoError(t, fs.WalkDir(testdata, ".", func(path string, info fs.DirEntry, err error) error {
 			if err != nil {
@@ -108,7 +102,7 @@ func WithTestdata(t *testing.T, testdata fs.FS) MigrationBoxOption {
 				flavor = pop.CanonicalDialect(strings.TrimPrefix(match[2], "."))
 			}
 
-			//t.Logf("Found test migration \"%s\" (%s, %+v): %s", flavor, match, err, info.Name())
+			// t.Logf("Found test migration \"%s\" (%s, %+v): %s", flavor, match, err, info.Name())
 
 			m.migrationsUp = append(m.migrationsUp, Migration{
 				Version:   version + "9", // run testdata after version

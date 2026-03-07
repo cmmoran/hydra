@@ -4,6 +4,7 @@
 package keysetpagination
 
 import (
+	"database/sql"
 	"encoding/json"
 	"time"
 
@@ -25,18 +26,26 @@ type (
 		ExpiresAt time.Time    `json:"e"`
 		Cols      []jsonColumn `json:"c"`
 	}
+
 	jsonColumn = struct {
-		Name      string    `json:"n"`
-		Order     Order     `json:"o"`
-		ValueAny  any       `json:"v"`
-		ValueTime time.Time `json:"vt"`
-		ValueUUID uuid.UUID `json:"vu"`
-		ValueInt  int64     `json:"vi"`
+		Name          string `json:"n"`
+		Order         Order  `json:"o,omitempty"`
+		Nullable      bool   `json:"nl,omitempty"`
+		HasConstraint bool   `json:"hc,omitempty"`
+
+		ValueAny   any        `json:"v,omitempty"`
+		ValueTime  *time.Time `json:"vt,omitempty"`
+		ValueUUID  *uuid.UUID `json:"vu,omitempty"`
+		ValueInt64 *int64     `json:"vi,omitempty"`
+		ValueNull  bool       `json:"vn,omitempty"`
 	}
 	Column struct {
-		Name  string
-		Order Order
-		Value any
+		Name     string
+		Order    Order
+		Value    any
+		Nullable bool
+		// HasConstraint marks if the column is already constrained by WHERE condition.
+		HasConstraint bool
 	}
 )
 
@@ -63,16 +72,36 @@ func (t PageToken) MarshalJSON() ([]byte, error) {
 	}
 	for i, col := range t.cols {
 		toEncode.Cols[i] = jsonColumn{
-			Name:  col.Name,
-			Order: col.Order,
+			Name:          col.Name,
+			Order:         col.Order,
+			Nullable:      col.Nullable,
+			HasConstraint: col.HasConstraint,
 		}
 		switch v := col.Value.(type) {
 		case time.Time:
-			toEncode.Cols[i].ValueTime = v
+			toEncode.Cols[i].ValueTime = new(v)
 		case uuid.UUID:
-			toEncode.Cols[i].ValueUUID = v
+			toEncode.Cols[i].ValueUUID = new(v)
+		case uuid.NullUUID:
+			if v.Valid {
+				toEncode.Cols[i].ValueUUID = new(v.UUID)
+			} else {
+				toEncode.Cols[i].ValueNull = true
+			}
+		case sql.NullString:
+			if v.Valid {
+				toEncode.Cols[i].ValueAny = new(v.String)
+			} else {
+				toEncode.Cols[i].ValueNull = true
+			}
 		case int64:
-			toEncode.Cols[i].ValueInt = v
+			toEncode.Cols[i].ValueInt64 = new(v)
+		case sql.NullInt64:
+			if v.Valid {
+				toEncode.Cols[i].ValueInt64 = new(v.Int64)
+			} else {
+				toEncode.Cols[i].ValueNull = true
+			}
 		default:
 			toEncode.Cols[i].ValueAny = v
 		}
@@ -90,20 +119,25 @@ func (t *PageToken) UnmarshalJSON(data []byte) error {
 	t.cols = make([]Column, len(rawToken.Cols))
 	for i, col := range rawToken.Cols {
 		t.cols[i] = Column{
-			Name:  col.Name,
-			Order: col.Order,
+			Name:          col.Name,
+			Order:         col.Order,
+			Nullable:      col.Nullable,
+			HasConstraint: col.HasConstraint,
 		}
 		switch {
+		case col.ValueNull:
+			t.cols[i].Value = nil
 		case col.ValueAny != nil:
 			t.cols[i].Value = col.ValueAny
-		case !col.ValueTime.IsZero():
-			t.cols[i].Value = col.ValueTime
-		case col.ValueUUID != uuid.Nil:
-			t.cols[i].Value = col.ValueUUID
-		case col.ValueInt != 0:
-			t.cols[i].Value = col.ValueInt
+		case col.ValueUUID != nil:
+			t.cols[i].Value = *col.ValueUUID
+		case col.ValueTime != nil:
+			t.cols[i].Value = *col.ValueTime
+		case col.ValueInt64 != nil:
+			t.cols[i].Value = *col.ValueInt64
 		}
 	}
+
 	now := time.Now
 	if t.testNow != nil {
 		now = t.testNow

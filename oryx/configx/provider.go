@@ -471,7 +471,7 @@ func (p *Provider) TracingConfig(serviceName string) *otelx.Config {
 			Jaeger: otelx.JaegerConfig{
 				Sampling: otelx.JaegerSampling{
 					ServerURL:    p.String("tracing.providers.jaeger.sampling.server_url"),
-					TraceIdRatio: p.Float64F("tracing.providers.jaeger.sampling.trace_id_ratio", 1),
+					TraceIDRatio: p.Float64F("tracing.providers.jaeger.sampling.trace_id_ratio", 1),
 				},
 				CollectorScheme:   p.String("tracing.providers.jaeger.collector_scheme"),
 				CollectorAddress:  p.String("tracing.providers.jaeger.collector_address"),
